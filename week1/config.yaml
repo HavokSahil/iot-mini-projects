@@ -1,0 +1,22 @@
+file: sensor_data.csv
+
+header:
+  - temperature
+  - humidity
+  - pressure
+  - iaq
+  - co2_ppm
+  - voc_ppm
+
+plots:
+  - temperature
+  - humidity
+  - pressure
+  - iaq
+  - co2_ppm
+  - voc_ppm
+
+sidebar:
+  - device_id
+  - time_range
+  - auto_refresh

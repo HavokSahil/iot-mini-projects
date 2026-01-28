@@ -2,7 +2,7 @@
 Environmental Sensor Monitoring Dashboard
 Complete version with model predictions and weather API comparison
 """
-
+import yaml
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -12,6 +12,13 @@ import numpy as np
 import requests
 from dotenv import load_dotenv
 import os
+
+@st.cache_data
+def load_config(path="config.yaml"):
+    with open(path, "r") as f:
+        return yaml.safe_load(f)
+
+config = load_config()
 
 load_dotenv()  # loads .env file
 
@@ -349,7 +356,7 @@ def load_model():
 with st.sidebar:
     st.markdown("### Filters")
     csv_path = st.text_input("CSV File Path", value="sensor_data.csv")
-    auto_refresh = st.checkbox("Auto-refresh (2s)", value=True)
+    auto_refresh = st.checkbox("Auto-refresh (2s)", value=False)
     
     time_range = st.selectbox(
         "Time Range",
@@ -396,6 +403,46 @@ with st.sidebar:
 # ==================== LAYOUT ====================
 main_col, right_col = st.columns([3, 1])
 
+def render_metric(label, value, unit=""):
+    if pd.notna(value):
+        st.metric(label, f"{value:.2f}{unit}")
+    else:
+        st.metric(label, "—")
+
+def render_timeseries(df, field, y_label):
+    if field not in df.columns or df[field].notna().sum() == 0:
+        return
+
+    x = df["timestamp"] if "timestamp" in df.columns else df.index
+    y = df[field]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+    x=x,
+    y=y,
+    mode="lines+markers",
+    name=field,
+    line=dict(color="white", width=1.5),
+    marker=dict(color="white", size=4)
+))
+
+
+    fig.update_layout(
+        height=280,
+        margin=dict(l=40, r=20, t=10, b=40),
+        yaxis_title=y_label,
+        plot_bgcolor="#0e1117",
+        paper_bgcolor="#0e1117",
+        font=dict(color="white"),
+        hovermode="x unified"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={"displayModeBar": False}
+    )
+
 # ==================== MAIN ====================
 with main_col:
     st.title("Sensor Monitor")
@@ -432,208 +479,43 @@ with main_col:
         latest = df.iloc[-1]
 
         # Metrics
-        c1,c2,c3,c4,c5,c6 = st.columns(6)
-        with c1:
-            temp = latest.get('temperature', None)
-            st.metric("Temperature", f"{temp:.1f}°C" if pd.notna(temp) else "—")
-        with c2:
-            humidity = latest.get('humidity', None)
-            st.metric("Humidity", f"{humidity:.1f}%" if pd.notna(humidity) else "—")
-        with c3:
-            pressure = latest.get('pressure', None)
-            if pd.notna(pressure):
-                if pressure < 10:
-                    st.metric("Pressure", f"{pressure:.2f} atm")
-                else:
-                    st.metric("Pressure", f"{pressure:.2f} atm")
-            else:
-                st.metric("Pressure", "—")
-        with c4:
-            iaq = latest.get('iaq', None)
-            st.metric("IAQ", f"{iaq:.0f}" if pd.notna(iaq) else "—")
-        with c5:
-            co2 = latest.get('co2_ppm', None)
-            st.metric("CO₂", f"{co2:.0f} ppm" if pd.notna(co2) else "—")
-        with c6:
-            voc = latest.get('voc_ppm', None)
-            st.metric("VOC", f"{voc:.2f} ppm" if pd.notna(voc) else "—")
+        st.markdown("### Live Metrics")
+
+        header_fields = config.get("header", [])
+
+        units = {
+            "temperature": "°C",
+            "humidity": "%",
+            "pressure": " atm",
+            "co2_ppm": " ppm",
+            "voc_ppm": " ppm",
+            "iaq": ""
+        }
+
+        cols = st.columns(len(header_fields))
+
+        for col, field in zip(cols, header_fields):
+            with col:
+                value = latest.get(field, None)
+                render_metric(field.upper(), value, units.get(field, ""))
+
 
         st.markdown("---")
         st.markdown("### Sensor Readings")
-        
-        # Charts
-        chart_col1, chart_col2 = st.columns(2)
-        
-        with chart_col1:
-            if 'temperature' in df.columns and df['temperature'].notna().any():
-                x_data = df['timestamp'] if 'timestamp' in df.columns else df.index
-                valid_mask = df['temperature'].notna()
-                x_valid = x_data[valid_mask]
-                y_valid = df['temperature'][valid_mask]
-                
-                fig_temp = go.Figure()
-                fig_temp.add_trace(go.Scatter(
-                    x=x_valid, y=y_valid,
-                    mode='lines+markers',
-                    name='Temperature',
-                    line=dict(color='#ffffff', width=1.5),
-                    marker=dict(size=4, color='#ffffff'),
-                    hovertemplate='%{y:.1f}°C<extra></extra>'
-                ))
-                fig_temp.update_layout(
-                    xaxis_title="", yaxis_title="°C", height=280,
-                    margin=dict(l=40, r=20, t=10, b=40),
-                    plot_bgcolor='#0e1117', paper_bgcolor='#0e1117',
-                    font=dict(size=11, color='#ffffff'),
-                    xaxis=dict(showgrid=True, gridcolor='#3a3a3a'),
-                    yaxis=dict(showgrid=True, gridcolor='#3a3a3a'),
-                    hovermode='x unified'
-                )
-                st.plotly_chart(fig_temp, use_container_width=True, config=dict(displayModeBar=False))
-        
-        with chart_col2:
-            if 'humidity' in df.columns and df['humidity'].notna().any():
-                x_data = df['timestamp'] if 'timestamp' in df.columns else df.index
-                valid_mask = df['humidity'].notna()
-                x_valid = x_data[valid_mask]
-                y_valid = df['humidity'][valid_mask]
-                
-                fig_hum = go.Figure()
-                fig_hum.add_trace(go.Scatter(
-                    x=x_valid, y=y_valid,
-                    mode='lines+markers',
-                    name='Humidity',
-                    line=dict(color='#ffffff', width=1.5),
-                    marker=dict(size=4, color='#ffffff'),
-                    hovertemplate='%{y:.1f}%<extra></extra>'
-                ))
-                fig_hum.update_layout(
-                    xaxis_title="", yaxis_title="%", height=280,
-                    margin=dict(l=40, r=20, t=10, b=40),
-                    plot_bgcolor='#0e1117', paper_bgcolor='#0e1117',
-                    font=dict(size=11, color='#ffffff'),
-                    xaxis=dict(showgrid=True, gridcolor='#3a3a3a'),
-                    yaxis=dict(showgrid=True, gridcolor='#3a3a3a'),
-                    hovermode='x unified'
-                )
-                st.plotly_chart(fig_hum, use_container_width=True, config=dict(displayModeBar=False))
-        
-        chart_col3, chart_col4 = st.columns(2)
-        
-        with chart_col3:
-            if 'pressure' in df.columns and df['pressure'].notna().any():
-                x_data = df['timestamp'] if 'timestamp' in df.columns else df.index
-                valid_mask = df['pressure'].notna()
-                x_valid = x_data[valid_mask]
-                pressure_values = df['pressure'][valid_mask].copy()
-                
-                if pressure_values.max() < 10:
-                    pressure_values = pressure_values * 100
-                else:
-                    pressure_values = pressure_values / 1000
-                
-                fig_press = go.Figure()
-                fig_press.add_trace(go.Scatter(
-                    x=x_valid, y=pressure_values,
-                    mode='lines+markers',
-                    name='Pressure',
-                    line=dict(color='#ffffff', width=1.5),
-                    marker=dict(size=4, color='#ffffff'),
-                    hovertemplate='%{y:.2f} atm<extra></extra>'
-                ))
-                fig_press.update_layout(
-                    xaxis_title="", yaxis_title="atm", height=280,
-                    margin=dict(l=40, r=20, t=10, b=40),
-                    plot_bgcolor='#0e1117', paper_bgcolor='#0e1117',
-                    font=dict(size=11, color='#ffffff'),
-                    xaxis=dict(showgrid=True, gridcolor='#3a3a3a'),
-                    yaxis=dict(showgrid=True, gridcolor='#3a3a3a'),
-                    hovermode='x unified'
-                )
-                st.plotly_chart(fig_press, use_container_width=True, config=dict(displayModeBar=False))
-        
-        with chart_col4:
-            if 'iaq' in df.columns and df['iaq'].notna().any():
-                x_data = df['timestamp'] if 'timestamp' in df.columns else df.index
-                valid_mask = df['iaq'].notna()
-                x_valid = x_data[valid_mask]
-                y_valid = df['iaq'][valid_mask]
-                
-                fig_iaq = go.Figure()
-                fig_iaq.add_trace(go.Scatter(
-                    x=x_valid, y=y_valid,
-                    mode='lines+markers',
-                    name='IAQ',
-                    line=dict(color='#ffffff', width=1.5),
-                    marker=dict(size=4, color='#ffffff'),
-                    hovertemplate='IAQ: %{y:.0f}<extra></extra>'
-                ))
-                fig_iaq.update_layout(
-                    xaxis_title="", yaxis_title="IAQ", height=280,
-                    margin=dict(l=40, r=20, t=10, b=40),
-                    plot_bgcolor='#0e1117', paper_bgcolor='#0e1117',
-                    font=dict(size=11, color='#ffffff'),
-                    xaxis=dict(showgrid=True, gridcolor='#3a3a3a'),
-                    yaxis=dict(showgrid=True, gridcolor='#3a3a3a'),
-                    hovermode='x unified'
-                )
-                st.plotly_chart(fig_iaq, use_container_width=True, config=dict(displayModeBar=False))
-        
-        chart_col5, chart_col6 = st.columns(2)
-        
-        with chart_col5:
-            if 'co2_ppm' in df.columns and df['co2_ppm'].notna().any():
-                x_data = df['timestamp'] if 'timestamp' in df.columns else df.index
-                valid_mask = df['co2_ppm'].notna()
-                x_valid = x_data[valid_mask]
-                y_valid = df['co2_ppm'][valid_mask]
-                
-                fig_co2 = go.Figure()
-                fig_co2.add_trace(go.Scatter(
-                    x=x_valid, y=y_valid,
-                    mode='lines+markers',
-                    name='CO₂',
-                    line=dict(color='#ffffff', width=1.5),
-                    marker=dict(size=4, color='#ffffff'),
-                    hovertemplate='CO₂: %{y:.0f} ppm<extra></extra>'
-                ))
-                fig_co2.update_layout(
-                    xaxis_title="", yaxis_title="ppm", height=280,
-                    margin=dict(l=40, r=20, t=10, b=40),
-                    plot_bgcolor='#0e1117', paper_bgcolor='#0e1117',
-                    font=dict(size=11, color='#ffffff'),
-                    xaxis=dict(showgrid=True, gridcolor='#3a3a3a'),
-                    yaxis=dict(showgrid=True, gridcolor='#3a3a3a'),
-                    hovermode='x unified'
-                )
-                st.plotly_chart(fig_co2, use_container_width=True, config=dict(displayModeBar=False))
-        
-        with chart_col6:
-            if 'voc_ppm' in df.columns and df['voc_ppm'].notna().any():
-                x_data = df['timestamp'] if 'timestamp' in df.columns else df.index
-                valid_mask = df['voc_ppm'].notna()
-                x_valid = x_data[valid_mask]
-                y_valid = df['voc_ppm'][valid_mask]
-                
-                fig_voc = go.Figure()
-                fig_voc.add_trace(go.Scatter(
-                    x=x_valid, y=y_valid,
-                    mode='lines+markers',
-                    name='VOC',
-                    line=dict(color='#ffffff', width=1.5),
-                    marker=dict(size=4, color='#ffffff'),
-                    hovertemplate='VOC: %{y:.2f} ppm<extra></extra>'
-                ))
-                fig_voc.update_layout(
-                    xaxis_title="", yaxis_title="ppm", height=280,
-                    margin=dict(l=40, r=20, t=10, b=40),
-                    plot_bgcolor='#0e1117', paper_bgcolor='#0e1117',
-                    font=dict(size=11, color='#ffffff'),
-                    xaxis=dict(showgrid=True, gridcolor='#3a3a3a'),
-                    yaxis=dict(showgrid=True, gridcolor='#3a3a3a'),
-                    hovermode='x unified'
-                )
-                st.plotly_chart(fig_voc, use_container_width=True, config=dict(displayModeBar=False))
+
+        plot_fields = config.get("plots", [])
+
+        for i in range(0, len(plot_fields), 2):
+            cols = st.columns(2)
+
+            for col, field in zip(cols, plot_fields[i:i+2]):
+                with col:
+                    render_timeseries(
+                        df,
+                        field,
+                        field.replace("_", " ").upper()
+                    )
+
 
         st.markdown("---")
         st.markdown("### Recent Data")
