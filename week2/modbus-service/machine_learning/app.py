@@ -13,7 +13,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-# ==================== CONFIG (NO HARDCODED PATHS) ====================
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
 CONFIG_EXAMPLE_PATH = os.path.join(SCRIPT_DIR, "config.example.json")
@@ -48,7 +48,7 @@ def load_config():
     return defaults
 
 
-# ==================== PAGE CONFIG ====================
+
 st.set_page_config(
     page_title="Soil Classification | IoT Lab",
     page_icon="🌱",
@@ -56,7 +56,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ==================== STYLING ====================
+
 st.markdown(
     """
     <style>
@@ -87,10 +87,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ==================== CONFIG-DRIVEN DEFAULTS ====================
+
 CONFIG = load_config()
 
-# ==================== SOIL LABELS & RECOMMENDATIONS ====================
+
 SOIL_CLASSES = {0: "Saline Soil", 1: "Balanced Soil", 2: "Dry Soil", 3: "Acidic Soil"}
 
 SOIL_RECOMMENDATIONS = {
@@ -120,11 +120,11 @@ SOIL_RECOMMENDATIONS = {
 - Consider dolomitic lime for magnesium deficiency""",
 }
 
-# Model uses only these 5 features (same as training)
+
 MODEL_FEATURES = ["moisture", "ec", "ph", "salinity", "tds"]
 
 
-# ==================== HELPER FUNCTIONS ====================
+
 def resolve_path(path_key, base_dir=SCRIPT_DIR):
     """Resolve path: if not absolute, join with script directory and normalize."""
     p = (path_key or "").strip()
@@ -272,7 +272,6 @@ def load_csv_fresh(path):
         return pd.DataFrame()
 
 
-# ==================== MODEL LOADER (CACHE BY PATH) ====================
 @st.cache_resource
 def load_model(model_path, scaler_path):
     """Load model and scaler from configurable paths."""
@@ -283,9 +282,6 @@ def load_model(model_path, scaler_path):
     except Exception:
         return None, None
 
-
-# ==================== CONFIG-BASED SETTINGS (NO SIDEBAR NAVIGATION) ====================
-# Paths come from config/env; display/refresh options configurable via config.json
 model_path_resolved = resolve_path(CONFIG["model_path"])
 scaler_path_resolved = resolve_path(CONFIG["scaler_path"])
 sensor_path_resolved = resolve_path(CONFIG["sensor_csv_path"])
@@ -303,11 +299,11 @@ time_range = CONFIG.get("time_range", "Last 100")
 show_distributions = bool(CONFIG.get("show_distributions", True))
 show_stats = bool(CONFIG.get("show_stats", True))
 
-# ==================== DATA LOADING (REAL-TIME, NO CACHE) ====================
+
 soil_df = load_csv_fresh(soil_dataset_path_resolved) if soil_exists else None
 sensor_df = load_csv_fresh(sensor_path_resolved) if sensor_exists else None
 
-# Data for graphs: prefer sensor CSV for live view, else soil dataset
+
 ranges_map = {"Last 100": 100, "Last 500": 500, "Last 1000": 1000, "Last 5000": 5000}
 n_tail = ranges_map.get(time_range, 100)
 if sensor_df is not None and not sensor_df.empty:
@@ -320,7 +316,7 @@ else:
     df_for_viz = pd.DataFrame()
     data_source_name = None
 
-# ==================== LAYOUT ====================
+
 st.title("🌱 Soil Classification – IoT Lab")
 
 if auto_refresh:
@@ -331,7 +327,7 @@ if auto_refresh:
 else:
     st.caption(f"⚪ Manual mode | Last update: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-# ----- Manual input + Predict (prominent) -----
+
 st.markdown("### 🔬 Soil classifier")
 with st.container():
     c1, c2 = st.columns([2, 1])
@@ -416,7 +412,7 @@ if not model_exists or not scaler_exists:
 
 st.markdown("---")
 
-# ----- Live metrics, charts, stats, recent data from sensor/dataset -----
+# Live metrics, charts, stats, recent data from sensor/dataset 
 if df_for_viz is not None and not df_for_viz.empty:
     # Current readings (all 9 parameters)
     st.markdown("### 📍 Current readings")
